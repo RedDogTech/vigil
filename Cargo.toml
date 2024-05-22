@@ -6,3 +6,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+rust-embed = "8.4.0"
+anyhow = "1"
+log = "0.4"
+mime_guess = "2"
+
+#Web dependaces
+actix = "0.13"
+actix-rt = "2"
+actix-web = "4"
+actix-web-actors = "4"
+
+#Gstreamer
+gstreamer = { version = "0.22.3", features = ["v1_22"] }
+gstreamer-video = "0.22.4"
+gstreamer-audio = "0.22.4"
