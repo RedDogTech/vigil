@@ -1,9 +1,13 @@
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{error, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web_actors::ws;
 use mime_guess::from_path;
 use rust_embed::Embed;
+use tracing::{error, info};
+
+use crate::controller::Controller;
 
 #[derive(Embed)]
-#[folder = "web/dist"]
+#[folder = "web-ui/dist"]
 struct Asset;
 
 async fn ws(
@@ -11,7 +15,17 @@ async fn ws(
     req: HttpRequest,
     stream: web::Payload,
 ) -> Result<HttpResponse, actix_web::Error> {
-    Ok(HttpResponse::NotFound().finish())
+    match path.as_str() {
+        "control" => {
+            let controller = Controller::new(&req.connection_info()).map_err(|err| {
+                error!("Failed to create controller: {}", err);
+                error::ErrorInternalServerError(err)
+            })?;
+
+            ws::start(controller, &req, stream)
+        }
+        _ => Ok(HttpResponse::NotFound().finish()),
+    }
 }
 
 fn handle_embedded_file(path: &str) -> HttpResponse {
@@ -34,11 +48,12 @@ pub async fn run() -> Result<(), anyhow::Error> {
     let server = HttpServer::new(move || {
         App::new()
             .wrap(actix_web::middleware::Logger::default())
-            .route("/ws/{mode:(control)}", web::get().to(ws))
+            .route("/api/{mode:(control)}", web::get().to(ws))
             .route("/", web::get().to(index))
             .route("/{_:.*}", web::get().to(dist))
     });
 
+    info!("Starting webserver");
     server.bind(format!("0.0.0.0:{}", 3000))?.run().await?;
 
     Ok(())
