@@ -20,7 +20,9 @@ export const Route = createRootRoute({
                 </Container>
             </Navbar>
 
-            <Outlet />
+            <Container className="my-5">
+                <Outlet />
+            </Container>
         </>
     ),
 });

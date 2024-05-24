@@ -1,10 +1,14 @@
+use actix::SystemService;
 use actix_web::{error, web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use mime_guess::from_path;
 use rust_embed::Embed;
 use tracing::{error, info};
 
-use crate::controller::Controller;
+use crate::{
+    controller::Controller,
+    node::{NodeManager, StopMessage},
+};
 
 #[derive(Embed)]
 #[folder = "web-ui/dist"]
@@ -54,7 +58,10 @@ pub async fn run() -> Result<(), anyhow::Error> {
     });
 
     info!("Starting webserver");
+
     server.bind(format!("0.0.0.0:{}", 3000))?.run().await?;
+
+    let _ = NodeManager::from_registry().send(StopMessage).await;
 
     Ok(())
 }

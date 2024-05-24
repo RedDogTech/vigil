@@ -2,17 +2,34 @@ use actix::prelude::*;
 use actix_web::dev::ConnectionInfo;
 use actix_web_actors::ws;
 use anyhow::{format_err, Error};
+use serde::{Deserialize, Serialize};
 use tracing::{debug, error, instrument, trace};
 
 use crate::{
     command::{Command, CommandResult, ControllerMessage, ServerMessage},
-    node::{CommandMessage, PipelineManager},
+    node::{CommandMessage, NodeManager},
 };
 
 #[derive(Debug)]
 pub struct Controller {
     /// Address of the remote controller
     remote_addr: String,
+}
+
+/// The state of a node
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum State {
+    /// The node is not running yet
+    Initial,
+    /// The node is preparing
+    Starting,
+    /// The node is playing
+    Started,
+    /// The node is stopping
+    Stopping,
+    /// The node has stopped
+    Stopped,
 }
 
 impl Controller {
@@ -36,7 +53,7 @@ impl Controller {
         command_id: uuid::Uuid,
         command: Command,
     ) -> impl ActorFuture<Self, Output = ()> {
-        let pipeline_manager = PipelineManager::from_registry();
+        let pipeline_manager = NodeManager::from_registry();
 
         async move { pipeline_manager.send(CommandMessage { command }).await }
             .into_actor(self)

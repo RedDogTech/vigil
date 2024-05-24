@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 /// Messages sent from the controller to the server.
@@ -12,34 +10,29 @@ pub struct ControllerMessage {
     pub command: Command,
 }
 
+/// Messages sent from the controller to the server.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VideoMode {
+    TestCard(String),
+    Stream(String),
+}
+
 /// Command variants
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Command {
     Ping {},
-    /// Reschedule any node
-    Start {
-        /// Identifier of an existing node
-        id: String,
-    },
-    /// Remove a node
-    Stop {
-        /// Identifier of an existing node
-        id: String,
-    },
-    /// Retrieve the info of one or all nodes
-    GetInfo {
-        /// The id of an existing node, or None, in which case the info
-        /// of all nodes in the system will be gathered
-        id: Option<String>,
-    },
+    Start { device_num: i16 },
+    Stop { device_num: i16 },
+    Sync {},
 }
 
 /// A map of node-specific information in reply to a GetInfo command
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub struct Info {
-    pub nodes: HashMap<String, String>,
+    pub devices: Vec<String>,
 }
 
 /// Messages sent from the the server to the controller.
@@ -50,8 +43,10 @@ pub enum CommandResult {
     Error(String),
     /// The command was successful
     Success,
+    ///
+    Pong,
     /// Information about one or all nodes
-    Info(Info),
+    Sync(Info),
 }
 
 /// Messages sent from the the server to the controller.

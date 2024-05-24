@@ -10,15 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.37.1",
     "@tanstack/react-router": "^1.33.7",
     "@types/uuid": "^9.0.8",
     "bootstrap": "^5.3.3",
     "react": "^18.2.0",
     "react-bootstrap": "^2.10.2",
     "react-dom": "^18.2.0",
-    "react-use-websocket": "^4.8.1",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "zustand": "^4.5.2"
   },
   "devDependencies": {
     "@tanstack/router-vite-plugin": "^1.32.17",

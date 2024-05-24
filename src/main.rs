@@ -4,7 +4,9 @@ use tracing_subscriber::layer::SubscriberExt;
 
 mod command;
 mod controller;
+mod device;
 mod node;
+mod pipeline;
 mod server;
 
 fn main() -> Result<(), Error> {
@@ -26,6 +28,8 @@ fn main() -> Result<(), Error> {
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
 
     gst::init()?;
+
+    //find_decklink_devices()?;
 
     let system = actix_rt::System::new();
     system.block_on(server::run())?;
