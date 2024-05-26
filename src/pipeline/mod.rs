@@ -19,5 +19,3 @@ pub struct ErrorMessage(pub String);
 impl Message for ErrorMessage {
     type Result = ();
 }
-
-pub struct Pipeline {}

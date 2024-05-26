@@ -2006,6 +2006,7 @@ dependencies = [
  "rust-embed",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
  "tracing-actix",
  "tracing-appender",

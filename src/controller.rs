@@ -1,9 +1,11 @@
+use std::time::{Duration, Instant};
+
 use actix::prelude::*;
 use actix_web::dev::ConnectionInfo;
 use actix_web_actors::ws;
 use anyhow::{format_err, Error};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, instrument, trace};
+use tracing::{debug, error, info, instrument, trace};
 
 use crate::{
     command::{Command, CommandResult, ControllerMessage, ServerMessage},
@@ -14,6 +16,8 @@ use crate::{
 pub struct Controller {
     /// Address of the remote controller
     remote_addr: String,
+    //Heartbeat listener
+    heart_beat: Instant,
 }
 
 /// The state of a node
@@ -32,6 +36,11 @@ pub enum State {
     Stopped,
 }
 
+/// How often heartbeat pings are sent
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+/// How long before lack of client response causes a timeout
+const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
+
 impl Controller {
     /// Create a new `Controller` actor.
     pub fn new(connection_info: &ConnectionInfo) -> Result<Self, Error> {
@@ -43,6 +52,7 @@ impl Controller {
 
         Ok(Controller {
             remote_addr: String::from(remote_addr),
+            heart_beat: Instant::now(),
         })
     }
 
@@ -53,9 +63,9 @@ impl Controller {
         command_id: uuid::Uuid,
         command: Command,
     ) -> impl ActorFuture<Self, Output = ()> {
-        let pipeline_manager = NodeManager::from_registry();
+        let node_manager = NodeManager::from_registry();
 
-        async move { pipeline_manager.send(CommandMessage { command }).await }
+        async move { node_manager.send(CommandMessage { command }).await }
             .into_actor(self)
             .then(move |res, _, ctx| {
                 match res {
@@ -110,16 +120,45 @@ impl Controller {
         }
         ctx.stop();
     }
+
+    fn heatbeat(&self, ctx: &mut <Self as Actor>::Context) {
+        ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
+            // check client heartbeats
+            if Instant::now().duration_since(act.heart_beat) > CLIENT_TIMEOUT {
+                info!("Websocket Client heartbeat failed, disconnecting!");
+                ctx.stop();
+                return;
+            }
+            ctx.ping(b"");
+        });
+    }
 }
 
 impl Actor for Controller {
     type Context = ws::WebsocketContext<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        let node_manager = NodeManager::from_registry();
+        let addr = ctx.address();
+        self.heatbeat(ctx);
+    }
+
+    fn stopped(&mut self, ctx: &mut Self::Context) {
+        let node_manager = NodeManager::from_registry();
+        let addr = ctx.address();
+    }
 }
 
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for Controller {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         match msg {
-            Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
+            Ok(ws::Message::Ping(msg)) => {
+                self.heart_beat = Instant::now();
+                ctx.pong(&msg);
+            }
+            Ok(ws::Message::Pong(_)) => {
+                self.heart_beat = Instant::now();
+            }
             Ok(ws::Message::Text(text)) => {
                 self.handle_message(ctx, &text);
             }
@@ -180,5 +219,21 @@ impl Handler<ErrorMessage> for Controller {
             })
             .expect("Failed to serialize error message"),
         );
+    }
+}
+
+/// Sent from nodes to [`PipelineManager`] to tear it down
+#[derive(Debug)]
+pub struct SyncMessage;
+
+impl Message for SyncMessage {
+    type Result = ();
+}
+
+impl Handler<SyncMessage> for Controller {
+    type Result = ();
+
+    fn handle(&mut self, _msg: SyncMessage, ctx: &mut ws::WebsocketContext<Self>) -> Self::Result {
+        println!("SyncMessage");
     }
 }

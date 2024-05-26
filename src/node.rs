@@ -4,11 +4,11 @@ use actix::{
 };
 use anyhow::Error;
 use std::collections::HashMap;
-use tracing::{debug, info, instrument, trace};
+use tracing::{debug, info, instrument};
 use tracing_actix::ActorInstrument;
 
 use crate::command::{Command, CommandResult, Info, VideoMode};
-use crate::controller::State;
+use crate::controller::{Controller, State};
 use crate::pipeline::decklink::DecklinkStream;
 
 #[derive(Default)]
