@@ -1,14 +1,16 @@
 use actix::{
-    Actor, ActorFuture, ActorFutureExt, Addr, Context, Handler, Message, MessageResult,
-    ResponseActFuture, ResponseFuture, SystemService, WeakRecipient, WrapFuture,
+    Actor, ActorFuture, ActorFutureExt, Addr, AsyncContext, Context, Handler, Message,
+    MessageResult, ResponseActFuture, ResponseFuture, SystemService, WeakRecipient, WrapFuture,
 };
 use anyhow::Error;
 use std::collections::HashMap;
+use std::time::Duration;
 use tracing::{debug, info, instrument};
 use tracing_actix::ActorInstrument;
+use uuid::Uuid;
 
 use crate::command::{Command, CommandResult, Info, VideoMode};
-use crate::controller::{Controller, State};
+use crate::controller::{Controller, State, SyncMessage};
 use crate::pipeline::decklink::DecklinkStream;
 
 #[derive(Default)]
@@ -17,6 +19,8 @@ pub struct NodeManager {
     nodes: HashMap<i16, Addr<DecklinkStream>>,
     /// Any listeners to events
     listeners: HashMap<String, WeakRecipient<NodeStatusMessage>>,
+    /// connected socket sessions
+    sessions: HashMap<Uuid, Addr<Controller>>,
 }
 
 /// Sent from [`controllers`](crate::controller::Controller), this is our
@@ -40,6 +44,13 @@ impl actix::Supervised for NodeManager {}
 impl SystemService for NodeManager {
     fn service_started(&mut self, ctx: &mut Context<Self>) {
         info!("Node manager coming online");
+
+        ctx.run_interval(Duration::from_secs(2), |act, ctx| {
+            let sessions = act.sessions.clone();
+            for (_, controller) in sessions.into_iter() {
+                controller.do_send(SyncMessage {});
+            }
+        });
     }
 }
 
@@ -215,4 +226,35 @@ pub struct StartMessage {}
 
 impl Message for StartMessage {
     type Result = Result<(), Error>;
+}
+
+#[derive(Debug, Clone)]
+pub enum WebsocketMessage {
+    /// Node state changed
+    Connection { id: Uuid, addr: Addr<Controller> },
+    /// Node encountered an error
+    Disconect { id: Uuid },
+}
+
+impl Message for WebsocketMessage {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<WebsocketMessage> for NodeManager {
+    type Result = MessageResult<WebsocketMessage>;
+
+    fn handle(&mut self, msg: WebsocketMessage, _ctx: &mut Self::Context) -> Self::Result {
+        match msg {
+            WebsocketMessage::Connection { id, addr } => {
+                self.sessions.insert(id, addr);
+                //Ok(())
+            }
+            WebsocketMessage::Disconect { id } => {
+                self.sessions.remove(&id);
+                //Ok(())
+            }
+        }
+
+        MessageResult(Ok(()))
+    }
 }

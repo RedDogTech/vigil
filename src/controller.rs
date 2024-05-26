@@ -6,18 +6,21 @@ use actix_web_actors::ws;
 use anyhow::{format_err, Error};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, instrument, trace};
+use uuid::Uuid;
 
 use crate::{
-    command::{Command, CommandResult, ControllerMessage, ServerMessage},
-    node::{CommandMessage, NodeManager},
+    command::{Command, CommandResult, ControllerMessage, Info, ServerMessage},
+    node::{self, CommandMessage, NodeManager, WebsocketMessage},
 };
 
 #[derive(Debug)]
 pub struct Controller {
     /// Address of the remote controller
     remote_addr: String,
-    //Heartbeat listener
+    /// Heartbeat listener
     heart_beat: Instant,
+    /// unquie id
+    id: Uuid,
 }
 
 /// The state of a node
@@ -53,6 +56,7 @@ impl Controller {
         Ok(Controller {
             remote_addr: String::from(remote_addr),
             heart_beat: Instant::now(),
+            id: Uuid::new_v4(),
         })
     }
 
@@ -140,12 +144,25 @@ impl Actor for Controller {
     fn started(&mut self, ctx: &mut Self::Context) {
         let node_manager = NodeManager::from_registry();
         let addr = ctx.address();
+
+        node_manager
+            .send(WebsocketMessage::Connection { id: self.id, addr })
+            .into_actor(self)
+            .then(|res, _, ctx| {
+                match res {
+                    Ok(_) => (),
+                    _ => ctx.stop(),
+                }
+                fut::ready(())
+            })
+            .wait(ctx);
+
         self.heatbeat(ctx);
     }
 
     fn stopped(&mut self, ctx: &mut Self::Context) {
         let node_manager = NodeManager::from_registry();
-        let addr = ctx.address();
+        node_manager.do_send(WebsocketMessage::Disconect { id: self.id })
     }
 }
 
@@ -175,7 +192,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for Controller {
             Ok(ws::Message::Continuation(_)) => {
                 error!("Unsupported continuation message, ignoring");
             }
-            Ok(ws::Message::Nop) | Ok(ws::Message::Pong(_)) => {
+            Ok(ws::Message::Nop) => {
                 // Do nothing
             }
             Err(err) => {
@@ -234,6 +251,12 @@ impl Handler<SyncMessage> for Controller {
     type Result = ();
 
     fn handle(&mut self, _msg: SyncMessage, ctx: &mut ws::WebsocketContext<Self>) -> Self::Result {
-        println!("SyncMessage");
+        ctx.text(
+            serde_json::to_string(&ServerMessage {
+                id: Some(Uuid::new_v4()),
+                result: CommandResult::Sync(Info { devices: vec![] }),
+            })
+            .expect("failed to serialize CommandResult message"),
+        )
     }
 }
