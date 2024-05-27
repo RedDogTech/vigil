@@ -1,6 +1,8 @@
 import { createLazyFileRoute } from "@tanstack/react-router";
 import Button from "react-bootstrap/Button";
 import Table from "react-bootstrap/Table";
+import Badge from "react-bootstrap/Badge";
+import ButtonGroup from "react-bootstrap/ButtonGroup";
 import { useEffect } from "react";
 import { Client, useClientState } from "../client";
 
@@ -41,15 +43,18 @@ function Index() {
                             <tr>
                                 <td>{device.device_num}</td>
                                 <td>{device.id}</td>
-                                <td>{device.state}</td>
                                 <td>
-                                    {" "}
-                                    <Button variant="primary" onClick={() => start(device.id)}>
-                                        Start
-                                    </Button>{" "}
-                                    <Button variant="danger" onClick={() => stop(device.id)}>
-                                        Stop
-                                    </Button>{" "}
+                                    <Badge bg="secondary">{device.state}</Badge>
+                                </td>
+                                <td>
+                                    <ButtonGroup>
+                                        <Button variant="primary" onClick={() => start(device.id)}>
+                                            Start
+                                        </Button>
+                                        <Button variant="danger" onClick={() => stop(device.id)}>
+                                            Stop
+                                        </Button>
+                                    </ButtonGroup>
                                 </td>
                             </tr>
                         );
