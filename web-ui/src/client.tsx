@@ -11,20 +11,31 @@ interface WebSocket {
     readonly readyState: WebSocket | number;
 }
 
+enum State {
+    Null,
+    Playing,
+    Stopped,
+}
+
+interface Device {
+    id: string;
+    device_num: number;
+    state: State;
+}
+
 interface ClientState {
     connected: boolean;
+    devices: Device[];
     setConnnected: (by: boolean) => void;
+    setDevices: (devices: Device[]) => void;
 }
 
 export const useClientState = create<ClientState>((set) => ({
     connected: false,
+    devices: [],
     setConnnected: (connected: boolean) => set({ connected }),
+    setDevices: (devices: Device[]) => set({ devices }),
 }));
-
-interface ServerRespone {
-    id: string;
-    command: { pong?: object };
-}
 
 export class Client {
     static shared: Client = new Client();
@@ -65,9 +76,8 @@ export class Client {
             return;
         }
 
-        switch (message.topic as ServerRespone) {
-            default:
-                console.log("Unknown message", message);
+        if (Object.prototype.hasOwnProperty.call(message.result, "sync")) {
+            return useClientState.getState().setDevices(message.result.sync as [Device]);
         }
     }
 
@@ -79,20 +89,20 @@ export class Client {
         setTimeout(() => this.send(message), 1000);
     }
 
-    start(num: number) {
+    start(device_id: string) {
         this.send(
             JSON.stringify({
                 id: uuidv4().toString(),
-                command: { start: { device_num: num } },
+                command: { start: { device_id: device_id } },
             }),
         );
     }
 
-    stop(num: number) {
+    stop(device_id: string) {
         this.send(
             JSON.stringify({
                 id: uuidv4().toString(),
-                command: { stop: { device_num: num } },
+                command: { stop: { device_id: device_id } },
             }),
         );
     }
