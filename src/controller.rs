@@ -9,8 +9,8 @@ use tracing::{debug, error, info, instrument, trace};
 use uuid::Uuid;
 
 use crate::{
-    command::{Command, CommandResult, ControllerMessage, Info, ServerMessage},
-    node::{self, CommandMessage, NodeManager, WebsocketMessage},
+    command::{Command, CommandResult, ControllerMessage, Device, ServerMessage},
+    node::{CommandMessage, NodeManager, WebsocketMessage},
 };
 
 #[derive(Debug)]
@@ -160,7 +160,7 @@ impl Actor for Controller {
         self.heatbeat(ctx);
     }
 
-    fn stopped(&mut self, ctx: &mut Self::Context) {
+    fn stopped(&mut self, _: &mut Self::Context) {
         let node_manager = NodeManager::from_registry();
         node_manager.do_send(WebsocketMessage::Disconect { id: self.id })
     }
@@ -241,7 +241,9 @@ impl Handler<ErrorMessage> for Controller {
 
 /// Sent from nodes to [`PipelineManager`] to tear it down
 #[derive(Debug)]
-pub struct SyncMessage;
+pub struct SyncMessage {
+    pub device: Vec<Device>,
+}
 
 impl Message for SyncMessage {
     type Result = ();
@@ -250,11 +252,11 @@ impl Message for SyncMessage {
 impl Handler<SyncMessage> for Controller {
     type Result = ();
 
-    fn handle(&mut self, _msg: SyncMessage, ctx: &mut ws::WebsocketContext<Self>) -> Self::Result {
+    fn handle(&mut self, msg: SyncMessage, ctx: &mut ws::WebsocketContext<Self>) -> Self::Result {
         ctx.text(
             serde_json::to_string(&ServerMessage {
                 id: Some(Uuid::new_v4()),
-                result: CommandResult::Sync(Info { devices: vec![] }),
+                result: CommandResult::Sync(msg.device),
             })
             .expect("failed to serialize CommandResult message"),
         )

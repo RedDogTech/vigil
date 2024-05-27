@@ -1,24 +1,24 @@
 use actix::{
-    Actor, ActorFuture, ActorFutureExt, Addr, AsyncContext, Context, Handler, Message,
-    MessageResult, ResponseActFuture, ResponseFuture, SystemService, WeakRecipient, WrapFuture,
+    Actor, ActorFutureExt, Addr, AsyncContext, Context, Handler, Message, MessageResult,
+    ResponseActFuture, ResponseFuture, SystemService, WrapFuture,
 };
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use std::collections::HashMap;
 use std::time::Duration;
-use tracing::{debug, info, instrument};
+use tracing::{info, instrument};
 use tracing_actix::ActorInstrument;
 use uuid::Uuid;
 
-use crate::command::{Command, CommandResult, Info, VideoMode};
-use crate::controller::{Controller, State, SyncMessage};
+use crate::command::{Command, CommandResult, Device, VideoMode};
+use crate::controller::{Controller, SyncMessage};
 use crate::pipeline::decklink::DecklinkStream;
 
 #[derive(Default)]
 pub struct NodeManager {
     /// All nodes by id
-    nodes: HashMap<i16, Addr<DecklinkStream>>,
-    /// Any listeners to events
-    listeners: HashMap<String, WeakRecipient<NodeStatusMessage>>,
+    nodes: HashMap<Uuid, Addr<DecklinkStream>>,
+    ///
+    devices: HashMap<Uuid, Device>,
     /// connected socket sessions
     sessions: HashMap<Uuid, Addr<Controller>>,
 }
@@ -45,55 +45,56 @@ impl SystemService for NodeManager {
     fn service_started(&mut self, ctx: &mut Context<Self>) {
         info!("Node manager coming online");
 
-        ctx.run_interval(Duration::from_secs(2), |act, ctx| {
+        let devices: u16 = 4;
+
+        for device_num in 0..devices {
+            let device_id = Uuid::new_v4();
+            if let Ok(stream) = DecklinkStream::new(device_id, device_num) {
+                let addr = stream.start();
+
+                self.nodes.insert(device_id, addr.clone());
+                self.devices.insert(
+                    device_id,
+                    Device {
+                        id: device_id,
+                        device_num,
+                        state: gstreamer::State::Null,
+                    },
+                );
+            }
+        }
+
+        ctx.run_interval(Duration::from_secs(2), |act, _| {
             let sessions = act.sessions.clone();
             for (_, controller) in sessions.into_iter() {
-                controller.do_send(SyncMessage {});
+                let devices = act.devices.clone();
+                controller.do_send(SyncMessage {
+                    device: devices.values().cloned().collect(),
+                });
             }
         });
     }
 }
 
 impl NodeManager {
-    fn sync_info_future(
-        &self,
-    ) -> std::pin::Pin<Box<dyn ActorFuture<NodeManager, Output = CommandResult>>> {
-        let nodes = vec!["test".to_string(), "test".to_string()];
-
-        Box::pin(actix::fut::ready(CommandResult::Sync(Info {
-            devices: nodes,
-        })))
-    }
-
     fn start_source(
         &mut self,
-        device_num: &i16,
+        device_id: &Uuid,
         _mode: &crate::command::VideoMode,
     ) -> ResponseActFuture<Self, CommandResult> {
-        if self.nodes.contains_key(device_num) {
-            return Box::pin(actix::fut::ready(CommandResult::Error(format!(
-                "A node already exists with id {}",
-                device_num
-            ))));
-        }
-
-        let stream = match DecklinkStream::new(device_num) {
-            Ok(stream) => stream,
-            Err(err) => {
-                return Box::pin(actix::fut::ready(CommandResult::Error(format!(
-                    "Failed to start {}",
-                    err
-                ))));
-            }
-        };
-
-        let addr = stream.start();
-
-        self.nodes.insert(device_num.clone(), addr.clone());
-
-        Box::pin(
-            {
-                async move { addr.recipient().send(StartMessage {}).await }
+        if let Some(node) = self.nodes.get(device_id) {
+            let node = node.clone();
+            if let Some(device) = self.devices.get_mut(device_id) {
+                device.state = gstreamer::State::Playing;
+            };
+            Box::pin(
+                {
+                    async move {
+                        match node.recipient().send(StartMessage {}).await {
+                            Ok(res) => res,
+                            Err(err) => Err(anyhow!("Internal server error {}", err)),
+                        }
+                    }
                     .into_actor(self)
                     .then(move |res, _slf, _ctx| {
                         actix::fut::ready(match res {
@@ -101,34 +102,30 @@ impl NodeManager {
                             Err(err) => CommandResult::Error(format!("{}", err)),
                         })
                     })
-            }
-            .in_current_actor_span(),
-        )
-    }
-
-    fn remove_node(&mut self, id: &i16) {
-        let _ = self.nodes.remove(id);
-    }
-
-    /// Tell a node to stop, by id
-    fn stop_source(&mut self, device_num: &i16) -> CommandResult {
-        if let Some(node) = self.nodes.get_mut(device_num) {
-            node.clone().recipient().do_send(StopMessage);
-            CommandResult::Success
+                }
+                .in_current_actor_span(),
+            )
         } else {
-            CommandResult::Error(format!("No node with id {}", device_num))
+            Box::pin(actix::fut::ready(CommandResult::Error(format!(
+                "No node with id {}",
+                device_id
+            ))))
         }
     }
 
-    fn notify_listeners(&mut self, message: NodeStatusMessage) {
-        self.listeners.retain(|_id, recipient| {
-            if let Some(recipient) = recipient.upgrade() {
-                recipient.do_send(message.clone());
-                true
-            } else {
-                false
+    /// Tell a node to stop, by id
+    fn stop_source(&mut self, device_id: &Uuid) -> CommandResult {
+        if let Some(node) = self.nodes.get_mut(device_id) {
+            node.clone().recipient().do_send(StopMessage);
+
+            if let Some(device) = self.devices.get_mut(device_id) {
+                device.state = gstreamer::State::Null;
             }
-        })
+
+            CommandResult::Success
+        } else {
+            CommandResult::Error(format!("No node with id {}", device_id))
+        }
     }
 }
 
@@ -138,38 +135,14 @@ impl Handler<CommandMessage> for NodeManager {
     fn handle(&mut self, msg: CommandMessage, _ctx: &mut Self::Context) -> Self::Result {
         match msg.command {
             Command::Ping {} => Box::pin(actix::fut::ready(CommandResult::Pong)),
-            Command::Start { device_num } => {
-                self.start_source(&device_num, &VideoMode::TestCard("test".to_string()))
+            Command::Start { device_id } => {
+                self.start_source(&device_id, &VideoMode::TestCard("test".to_string()))
             }
-            Command::Stop { device_num } => {
-                Box::pin(actix::fut::ready(self.stop_source(&device_num)))
+            Command::Stop { device_id } => {
+                Box::pin(actix::fut::ready(self.stop_source(&device_id)))
             }
-            Command::Sync {} => self.sync_info_future(),
         }
     }
-}
-
-impl Handler<NodeStatusMessage> for NodeManager {
-    type Result = ();
-
-    #[instrument(level = "trace", name = "notifying listeners", skip(self, _ctx))]
-    fn handle(&mut self, msg: NodeStatusMessage, _ctx: &mut Context<Self>) -> Self::Result {
-        self.notify_listeners(msg)
-    }
-}
-
-/// Sent from [`Node`] to [`NodeManager`] so that it can inform listeners
-/// of nodes' status
-#[derive(Debug, Clone)]
-pub enum NodeStatusMessage {
-    /// Node state changed
-    State { id: String, state: State },
-    /// Node encountered an error
-    Error { id: String, message: String },
-}
-
-impl Message for NodeStatusMessage {
-    type Result = ();
 }
 
 #[derive(Debug)]
@@ -184,10 +157,6 @@ impl Handler<StoppedMessage> for NodeManager {
 
     #[instrument(level = "debug", name = "removing-node", skip(self, _ctx, msg), fields(id = %msg.id))]
     fn handle(&mut self, msg: StoppedMessage, _ctx: &mut Context<Self>) -> Self::Result {
-        self.remove_node(&msg.id);
-
-        debug!("node {} removed from NodeManager", msg.id);
-
         MessageResult(())
     }
 }
@@ -213,7 +182,7 @@ impl Handler<StopMessage> for NodeManager {
 #[derive(Debug)]
 pub struct StoppedMessage {
     /// Unique identifier of the node
-    pub id: i16,
+    pub id: Uuid,
 }
 
 impl Message for StoppedMessage {

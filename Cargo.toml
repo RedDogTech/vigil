@@ -32,6 +32,6 @@ actix-web = "4"
 actix-web-actors = "4"
 
 #Gstreamer
-gstreamer = { version = "0.22.3", features = ["v1_22"] }
+gstreamer = { version = "0.22.3", features = ["v1_22", "serde"] }
 gstreamer-video = "0.22.4"
 gstreamer-audio = "0.22.4"

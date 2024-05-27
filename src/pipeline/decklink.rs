@@ -6,8 +6,9 @@ use gst::prelude::*;
 use gstreamer as gst;
 use tracing::instrument;
 use tracing::{debug, error};
+use uuid::Uuid;
 
-use crate::node::{NodeManager, NodeStatusMessage, StartMessage, StopMessage, StoppedMessage};
+use crate::node::{NodeManager, StartMessage, StopMessage, StoppedMessage};
 
 use super::manager::{PipelineManager, StopManagerMessage};
 use super::{make_element, ErrorMessage};
@@ -18,7 +19,9 @@ use super::{make_element, ErrorMessage};
 #[derive(Debug)]
 pub struct DecklinkStream {
     /// Unique identifier
-    id: String,
+    id: Uuid,
+    /// Decklink device id num
+    device_num: u16,
     /// The wrapped pipeline
     pipeline: gst::Pipeline,
     /// A helper for managing the pipeline
@@ -36,7 +39,7 @@ impl Actor for DecklinkStream {
             PipelineManager::new(
                 self.pipeline.clone(),
                 ctx.address().downgrade().recipient(),
-                &self.id,
+                self.id,
             )
             .start(),
         );
@@ -49,13 +52,13 @@ impl Actor for DecklinkStream {
         }
 
         NodeManager::from_registry().do_send(StoppedMessage {
-            id: self.id.clone().parse::<i16>().unwrap(),
+            id: self.id.clone(),
         });
     }
 }
 
 impl DecklinkStream {
-    pub fn new(device_num: &i16) -> Result<Self, Error> {
+    pub fn new(device_id: Uuid, device_num: u16) -> Result<Self, Error> {
         let pipeline = gst::Pipeline::new();
 
         let src = make_element("videotestsrc", None)?;
@@ -67,9 +70,10 @@ impl DecklinkStream {
         gst::Element::link_many(&[src, sink])?;
 
         Ok(Self {
-            id: device_num.to_string(),
+            id: device_id,
             pipeline,
             pipeline_manager: None,
+            device_num,
         })
     }
 
@@ -115,10 +119,10 @@ impl Handler<ErrorMessage> for DecklinkStream {
     fn handle(&mut self, msg: ErrorMessage, ctx: &mut Context<Self>) -> Self::Result {
         error!("Got error message '{}' on destination {}", msg.0, self.id,);
 
-        NodeManager::from_registry().do_send(NodeStatusMessage::Error {
-            id: self.id.clone(),
-            message: msg.0,
-        });
+        // NodeManager::from_registry().do_send(NodeStatusMessage::Error {
+        //     id: self.id.clone(),
+        //     message: msg.0,
+        // });
 
         ctx.stop();
     }

@@ -5,6 +5,7 @@ use futures::prelude::*;
 use gst::prelude::*;
 use gstreamer as gst;
 use tracing::{debug, instrument, trace};
+use uuid::Uuid;
 
 use super::ErrorMessage;
 
@@ -66,7 +67,7 @@ pub struct PipelineManager {
     /// The recipient for potential error messages
     recipient: actix::WeakRecipient<ErrorMessage>,
     /// The identifier of the creator node, for tracing
-    id: String,
+    id: Uuid,
     /// To signal that EOS was processed
     eos_sender: Option<oneshot::Sender<()>>,
     /// To wait for EOS to be processed
@@ -170,7 +171,7 @@ impl StreamHandler<BusMessage> for PipelineManager {
 
 impl PipelineManager {
     /// Create a new manager
-    pub fn new(pipeline: gst::Pipeline, recipient: WeakRecipient<ErrorMessage>, id: &str) -> Self {
+    pub fn new(pipeline: gst::Pipeline, recipient: WeakRecipient<ErrorMessage>, id: Uuid) -> Self {
         let (eos_sender, eos_receiver) = oneshot::channel::<()>();
 
         // pipeline.use_clock(Some(&gst::SystemClock::obtain()));
@@ -180,7 +181,7 @@ impl PipelineManager {
         Self {
             pipeline,
             recipient,
-            id: id.to_string(),
+            id,
             eos_sender: Some(eos_sender),
             eos_receiver: Some(eos_receiver),
         }

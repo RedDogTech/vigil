@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Messages sent from the controller to the server.
 #[derive(Debug, Serialize, Deserialize)]
@@ -23,16 +24,17 @@ pub enum VideoMode {
 #[serde(rename_all = "lowercase")]
 pub enum Command {
     Ping {},
-    Start { device_num: i16 },
-    Stop { device_num: i16 },
-    Sync {},
+    Start { device_id: Uuid },
+    Stop { device_id: Uuid },
 }
 
 /// A map of node-specific information in reply to a GetInfo command
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "lowercase")]
-pub struct Info {
-    pub devices: Vec<String>,
+pub struct Device {
+    pub id: Uuid,
+    pub device_num: u16,
+    pub state: gstreamer::State,
 }
 
 /// Messages sent from the the server to the controller.
@@ -46,7 +48,7 @@ pub enum CommandResult {
     ///
     Pong,
     /// Information about one or all nodes
-    Sync(Info),
+    Sync(Vec<Device>),
 }
 
 /// Messages sent from the the server to the controller.
