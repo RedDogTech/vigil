@@ -111,7 +111,7 @@ impl DecklinkStream {
             .property_from_str("mode", "1080p60")
             .property_from_str("mapping-format", "level-a")
             .property("device-number", device_num)
-            .property("profile", 4)
+            .property_from_str("profile", "two-sub-devices-half")
             .property("sync", true)
             .build()?;
 

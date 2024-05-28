@@ -49,19 +49,25 @@ impl SystemService for NodeManager {
 
         for device_num in 0..devices {
             let device_id = Uuid::new_v4();
-            if let Ok(stream) = DecklinkStream::new(ctx.address(), device_id, device_num) {
-                let addr = stream.start();
 
-                self.nodes.insert(device_id, addr.clone());
-                self.devices.insert(
-                    device_id,
-                    Device {
-                        id: device_id,
-                        device_num,
-                        state: gstreamer::State::Ready,
-                    },
-                );
-            }
+            let _ = match DecklinkStream::new(ctx.address(), device_id, device_num) {
+                Ok(stream) => {
+                    let addr = stream.start();
+
+                    self.nodes.insert(device_id, addr.clone());
+                    self.devices.insert(
+                        device_id,
+                        Device {
+                            id: device_id,
+                            device_num,
+                            state: gstreamer::State::Ready,
+                        },
+                    );
+
+                    Ok(())
+                }
+                Err(err) => Err(anyhow!("Failed to start decklink device error {}", err)),
+            };
         }
 
         ctx.run_interval(Duration::from_secs(2), |act, _| {
