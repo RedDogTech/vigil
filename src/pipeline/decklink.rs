@@ -94,7 +94,10 @@ impl DecklinkStream {
             .build()?;
 
         let overlay = gst::ElementFactory::make("timeoverlay")
-            .property_from_str("text", format!("SDI-{} Output:\n", device_num).as_str())
+            .property_from_str(
+                "text",
+                format!("SDI-{} Output:\n", (device_num + 1)).as_str(),
+            )
             .property_from_str("halignment", "center")
             .property_from_str("valignment", "center")
             .property_from_str("font-desc", "Sans, 36")
