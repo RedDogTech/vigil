@@ -30,6 +30,7 @@ actix = "0.13"
 actix-rt = "2"
 actix-web = "4"
 actix-web-actors = "4"
+actix-cors = "0.6.1"
 
 #Gstreamer
 gstreamer = { version = "0.22.3", features = ["v1_22", "serde"] }

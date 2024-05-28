@@ -1,4 +1,5 @@
 use actix::SystemService;
+use actix_cors::Cors;
 use actix_web::{error, web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use mime_guess::from_path;
@@ -52,7 +53,10 @@ async fn dist(path: web::Path<String>) -> HttpResponse {
 }
 pub async fn run() -> Result<(), anyhow::Error> {
     let server = HttpServer::new(move || {
+        let cors = Cors::default().allow_any_origin().send_wildcard();
+
         App::new()
+            .wrap(cors)
             .wrap(actix_web::middleware::Logger::default())
             .route("/api/{mode:(control)}", web::get().to(ws))
             .route("/", web::get().to(index))
