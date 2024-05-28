@@ -3,7 +3,7 @@ use actix_web::{error, web, App, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use mime_guess::from_path;
 use rust_embed::Embed;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 use crate::{
     controller::Controller,
@@ -21,11 +21,13 @@ async fn ws(
 ) -> Result<HttpResponse, actix_web::Error> {
     match path.as_str() {
         "control" => {
+            trace!("trace creating new controller");
             let controller = Controller::new(&req.connection_info()).map_err(|err| {
                 error!("Failed to create controller: {}", err);
                 error::ErrorInternalServerError(err)
             })?;
 
+            trace!("starting new controller");
             ws::start(controller, &req, stream)
         }
         _ => Ok(HttpResponse::NotFound().finish()),
