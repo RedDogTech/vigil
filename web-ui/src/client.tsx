@@ -77,7 +77,9 @@ export class Client {
         }
 
         if (Object.prototype.hasOwnProperty.call(message.result, "sync")) {
-            return useClientState.getState().setDevices(message.result.sync as [Device]);
+            let devices = message.result.sync as [Device];
+            devices = devices.sort(({ device_num: a }, { device_num: b }) => b - a);
+            return useClientState.getState().setDevices(devices);
         }
     }
 
