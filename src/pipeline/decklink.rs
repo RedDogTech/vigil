@@ -22,7 +22,7 @@ pub struct DecklinkStream {
     /// Unique identifier
     id: Uuid,
     /// Decklink device id num
-    device_num: u32,
+    device_num: i32,
     /// The wrapped pipeline
     pipeline: gst::Pipeline,
     /// A helper for managing the pipeline
@@ -78,7 +78,7 @@ impl DecklinkStream {
     pub fn new(
         _node_manager: Addr<NodeManager>,
         device_id: Uuid,
-        device_num: u32,
+        device_num: i32,
     ) -> Result<Self, Error> {
         let pipeline = gst::Pipeline::new();
 
@@ -110,7 +110,6 @@ impl DecklinkStream {
         let video_sink = gst::ElementFactory::make("decklinkvideosink")
             .property_from_str("mode", "1080p60")
             .property_from_str("mapping-format", "level-a")
-            .property_from_str("connection", "sdi")
             .property("device-number", device_num)
             .property("sync", true)
             .build()?;

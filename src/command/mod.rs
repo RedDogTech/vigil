@@ -33,7 +33,7 @@ pub enum Command {
 #[serde(rename_all = "lowercase")]
 pub struct Device {
     pub id: Uuid,
-    pub device_num: u32,
+    pub device_num: i32,
     pub state: gstreamer::State,
 }
 

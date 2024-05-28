@@ -45,7 +45,7 @@ impl SystemService for NodeManager {
     fn service_started(&mut self, ctx: &mut Context<Self>) {
         info!("Node manager coming online");
 
-        let devices: u32 = 4;
+        let devices: i32 = 4;
 
         for device_num in 0..devices {
             let device_id = Uuid::new_v4();
