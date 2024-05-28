@@ -176,7 +176,18 @@ impl Handler<StopMessage> for DecklinkStream {
     type Result = Result<(), Error>;
 
     fn handle(&mut self, _: StopMessage, ctx: &mut Context<Self>) -> Self::Result {
-        ctx.stop();
+        //ctx.stop();
+        let addr = ctx.address();
+        let id = self.id.clone();
+
+        self.pipeline.call_async(move |pipeline| {
+            if let Err(err) = pipeline.set_state(gst::State::Null) {
+                addr.do_send(ErrorMessage(format!(
+                    "Failed to start mixer {}: {}",
+                    id, err
+                )));
+            }
+        });
         Ok(())
     }
 }
