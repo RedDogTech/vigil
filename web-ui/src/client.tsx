@@ -40,8 +40,7 @@ export const useClientState = create<ClientState>((set) => ({
 
 export class Client {
     static shared: Client = new Client();
-
-    url = "ws://localhost:3000/api/control";
+    url = `ws://${window.location.hostname}:3000/api/control`;
     ws: WebSocket | undefined;
     reconnectTimer: number | undefined;
 
