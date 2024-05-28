@@ -15,6 +15,7 @@ enum State {
     Null,
     Playing,
     Stopped,
+    Ready,
 }
 
 interface Device {

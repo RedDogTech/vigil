@@ -60,3 +60,10 @@ pub struct ServerMessage {
     /// The command result
     pub result: CommandResult,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+/// Mixer-specific information
+pub struct NodeState {
+    pub state: gstreamer::State,
+}

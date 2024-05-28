@@ -11,11 +11,6 @@ export const Route = createLazyFileRoute("/")({
 });
 
 function Index() {
-    useEffect(() => {
-        Client.shared.connect();
-        //generate();
-    }, []);
-
     const start = (device_id: string) => {
         Client.shared.start(device_id);
     };

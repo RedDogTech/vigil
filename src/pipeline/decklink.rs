@@ -4,6 +4,7 @@ use anyhow::Error;
 use gst::prelude::ElementExtManual;
 use gst::prelude::*;
 use gstreamer as gst;
+use gstreamer_video as gst_video;
 use tracing::instrument;
 use tracing::{debug, error};
 use uuid::Uuid;
@@ -21,11 +22,12 @@ pub struct DecklinkStream {
     /// Unique identifier
     id: Uuid,
     /// Decklink device id num
-    device_num: u16,
+    device_num: u32,
     /// The wrapped pipeline
     pipeline: gst::Pipeline,
     /// A helper for managing the pipeline
     pipeline_manager: Option<Addr<PipelineManager>>,
+    // node_manager: Addr<NodeManager>,
 }
 
 impl Actor for DecklinkStream {
@@ -43,6 +45,21 @@ impl Actor for DecklinkStream {
             )
             .start(),
         );
+
+        // ctx.run_interval(Duration::from_secs(1), |act, _| {
+        //     let state = act.pipeline.current_state();
+        //     println!("current_state {:?}", state);
+
+        //     let clock = act.pipeline.current_running_time();
+        //     println!("current_running_time {:?}", clock);
+
+        //     // act.node_manager
+        //     //     .clone()
+        //     //     .recipient()
+        //     //     .do_send(NodeStateMessage { state });
+        //     //
+        //     println!("++++++++++++");
+        // });
     }
 
     #[instrument(level = "debug", name = "stopped", skip(self, _ctx), fields(id = %self.id))]
@@ -58,22 +75,70 @@ impl Actor for DecklinkStream {
 }
 
 impl DecklinkStream {
-    pub fn new(device_id: Uuid, device_num: u16) -> Result<Self, Error> {
+    pub fn new(
+        _node_manager: Addr<NodeManager>,
+        device_id: Uuid,
+        device_num: u32,
+    ) -> Result<Self, Error> {
         let pipeline = gst::Pipeline::new();
 
-        let src = make_element("videotestsrc", None)?;
-        let sink = make_element("autovideosink", None)?;
+        let video_caps = gst_video::VideoCapsBuilder::new()
+            .width(1920)
+            .height(1080)
+            .framerate((60, 1).into())
+            .build();
 
-        src.set_property("is-live", true);
+        let video_source = gst::ElementFactory::make("videotestsrc")
+            .property_from_str("pattern", "smpte")
+            .property("is-live", true)
+            .build()?;
 
-        pipeline.add_many(&[&src, &sink])?;
-        gst::Element::link_many(&[src, sink])?;
+        let overlay = gst::ElementFactory::make("timeoverlay")
+            .property_from_str("text", format!("SDI-{} Output:\n", device_num).as_str())
+            .property_from_str("halignment", "center")
+            .property_from_str("valignment", "center")
+            .property_from_str("font-desc", "Sans, 36")
+            .build()?;
+
+        let caps = gst::ElementFactory::make("capsfilter")
+            .property("caps", &video_caps)
+            .build()?;
+
+        let timecode = gst::ElementFactory::make("timecodestamper").build()?;
+        let convert = gst::ElementFactory::make("videoconvert").build()?;
+
+        let video_sink = gst::ElementFactory::make("decklinkvideosink")
+            .property_from_str("mode", "1080p60")
+            .property_from_str("mapping-format", "level-a")
+            .property_from_str("connection", "sdi")
+            .property("device-number", device_num)
+            .property("sync", true)
+            .build()?;
+
+        pipeline.add_many([
+            &video_source,
+            &overlay,
+            &caps,
+            &timecode,
+            &convert,
+            &video_sink,
+        ])?;
+
+        gst::Element::link_many([
+            &video_source,
+            &overlay,
+            &caps,
+            &timecode,
+            &convert,
+            &video_sink,
+        ])?;
 
         Ok(Self {
             id: device_id,
             pipeline,
             pipeline_manager: None,
             device_num,
+            //node_manager,
         })
     }
 

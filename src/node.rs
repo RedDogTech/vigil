@@ -1,5 +1,5 @@
 use actix::{
-    Actor, ActorFutureExt, Addr, AsyncContext, Context, Handler, Message, MessageResult,
+    Actor, ActorFutureExt, Addr, Arbiter, AsyncContext, Context, Handler, Message, MessageResult,
     ResponseActFuture, ResponseFuture, SystemService, WrapFuture,
 };
 use anyhow::{anyhow, Error};
@@ -9,7 +9,7 @@ use tracing::{info, instrument};
 use tracing_actix::ActorInstrument;
 use uuid::Uuid;
 
-use crate::command::{Command, CommandResult, Device, VideoMode};
+use crate::command::{Command, CommandResult, Device, NodeState, VideoMode};
 use crate::controller::{Controller, SyncMessage};
 use crate::pipeline::decklink::DecklinkStream;
 
@@ -49,7 +49,7 @@ impl SystemService for NodeManager {
 
         for device_num in 0..devices {
             let device_id = Uuid::new_v4();
-            if let Ok(stream) = DecklinkStream::new(device_id, device_num) {
+            if let Ok(stream) = DecklinkStream::new(ctx.address(), device_id, device_num) {
                 let addr = stream.start();
 
                 self.nodes.insert(device_id, addr.clone());
@@ -58,7 +58,7 @@ impl SystemService for NodeManager {
                     Device {
                         id: device_id,
                         device_num,
-                        state: gstreamer::State::Null,
+                        state: gstreamer::State::Ready,
                     },
                 );
             }
@@ -119,7 +119,7 @@ impl NodeManager {
             node.clone().recipient().do_send(StopMessage);
 
             if let Some(device) = self.devices.get_mut(device_id) {
-                device.state = gstreamer::State::Null;
+                device.state = gstreamer::State::Ready;
             }
 
             CommandResult::Success
@@ -225,5 +225,28 @@ impl Handler<WebsocketMessage> for NodeManager {
         }
 
         MessageResult(Ok(()))
+    }
+}
+
+/// Retrieves node-specific information. Sent from [`NodeManager`] to
+/// any [`Node`].
+#[derive(Debug)]
+pub struct NodeStateMessage {
+    pub state: gstreamer::State,
+}
+
+impl Message for NodeStateMessage {
+    type Result = Result<(), Error>;
+}
+
+impl Handler<NodeStateMessage> for NodeManager {
+    type Result = Result<(), Error>;
+
+    fn handle(&mut self, msg: NodeStateMessage, _: &mut Context<Self>) -> Self::Result {
+        // let state = self.pipeline.state(Some(ClockTime::ZERO)).2;
+        // println!("GetNodeStateMessage {:?}", state);
+        // Ok(NodeState { state })
+        println!("{:?}", msg);
+        Ok(())
     }
 }

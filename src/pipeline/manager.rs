@@ -156,7 +156,7 @@ impl StreamHandler<BusMessage> for PipelineManager {
             }
             MessageView::StateChanged(state_changed) => {
                 if Some(self.pipeline.upcast_ref::<gst::Object>()) == state_changed.src() {
-                    trace!(
+                    debug!(
                         "state-change-{}-{:?}-to-{:?}",
                         self.id,
                         state_changed.old(),
@@ -174,9 +174,9 @@ impl PipelineManager {
     pub fn new(pipeline: gst::Pipeline, recipient: WeakRecipient<ErrorMessage>, id: Uuid) -> Self {
         let (eos_sender, eos_receiver) = oneshot::channel::<()>();
 
-        // pipeline.use_clock(Some(&gst::SystemClock::obtain()));
-        // pipeline.set_start_time(gst::ClockTime::NONE);
-        // pipeline.set_base_time(gst::ClockTime::from_nseconds(0));
+        pipeline.use_clock(Some(&gst::SystemClock::obtain()));
+        pipeline.set_start_time(gst::ClockTime::from_nseconds(0));
+        pipeline.set_base_time(gst::ClockTime::from_nseconds(0));
 
         Self {
             pipeline,
