@@ -118,6 +118,11 @@ impl DecklinkStream {
             .property("sync", true)
             .build()?;
 
+        let audio_source = gst::ElementFactory::make("audiotestsrc").build()?;
+        let audio_sink = gst::ElementFactory::make("decklinkaudiosink")
+            .property("device-number", device_num)
+            .build()?;
+
         pipeline.add_many([
             &video_source,
             &overlay,
@@ -125,6 +130,8 @@ impl DecklinkStream {
             &timecode,
             &convert,
             &video_sink,
+            &audio_source,
+            &audio_sink,
         ])?;
 
         gst::Element::link_many([
@@ -135,6 +142,8 @@ impl DecklinkStream {
             &convert,
             &video_sink,
         ])?;
+
+        gst::Element::link_many([&audio_source, &audio_sink])?;
 
         Ok(Self {
             id: device_id,
